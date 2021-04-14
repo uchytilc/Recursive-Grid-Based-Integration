@@ -1,0 +1,6 @@
+[submodule "interval"]
+	path = interval
+	url = https://github.com/uchytilc/interval.git
+[submodule "vector_extensions"]
+	path = vector_extensions
+	url = https://github.com/uchytilc/vector_extensions.git
