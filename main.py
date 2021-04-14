@@ -1,7 +1,7 @@
 #add pycu to path
 import pathlib, sys
 path = pathlib.Path(__file__)
-path = path.parent.absolute()
+path = path.parent.absolute() #.parent
 sys.path.append(str(path))
 
 import pycu
@@ -12,8 +12,8 @@ import numpy as np
 def compile_kernels():
 	#if the C header files are in a location other than where the main.py file is located
 	#their directories will need to be included so that the compiler (NVRTC) can find them
-	dirs = [os.path.join('..','vector_extensions'),
-			os.path.join('..','interval')]
+	dirs = [os.path.join('vector_extensions'),
+			os.path.join('interval')]
 
 	file = pycu.utils.open_file("kernel.cu")
 	entry = ["root", "dense"]
@@ -46,13 +46,14 @@ def launch_sparse(box, h):
 
 	blocks, threads = 1,1
 
+	print('sparse')
 	start = time.time()
 	root<<(blocks, threads)>>(d_quad, d_occupancy, d_box, d_h, d_offset)
 	quad = sorted(pycu.to_host(d_quad))
 	print('time: ', time.time() - start)
 	print('quad: ', np.sum(quad))
-	occupancy = pycu.to_host(d_occupancy)
-	print('leaf nodes evaluated: ', occupancy[0])
+	# occupancy = pycu.to_host(d_occupancy)
+	# print('leaf nodes evaluated: ', occupancy[0])
 	print()
 
 def launch_dense(box, h):
@@ -79,17 +80,18 @@ def launch_dense(box, h):
 
 	blocks, threads = get_kernel_launch_parameters()
 
+	print('dense')
 	start = time.time()
 	dense<<(blocks, threads)>>(d_quad, d_shape, d_offset, d_h)
 	quad = pycu.to_host(d_quad)
-	print('quad: ', quad[0])
 	print('time: ', time.time() - start)
+	print('quad: ', quad[0])
 
 box = np.array([4.5,4.5,4.5], dtype = np.float32)
 shape = 1 << 11
 h = np.float32(box[0]/((shape) - 1))
 
-print([shape]*3)
+print([shape]*3,'\n')
 root, dense = compile_kernels()
-# launch_sparse(box, h)
-# launch_dense(box, h)
+launch_sparse(box, h)
+launch_dense(box, h)
