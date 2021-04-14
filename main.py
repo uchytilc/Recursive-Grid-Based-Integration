@@ -12,8 +12,8 @@ import numpy as np
 def compile_kernels():
 	#if the C header files are in a location other than where the main.py file is located
 	#their directories will need to be included so that the compiler (NVRTC) can find them
-	dirs = [os.path.join('vector_extensions'),
-			os.path.join('interval')]
+	dirs = ['vector_extensions',
+			'interval']
 
 	file = pycu.utils.open_file("kernel.cu")
 	entry = ["root", "dense"]
