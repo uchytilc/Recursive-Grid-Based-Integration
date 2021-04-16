@@ -20,9 +20,9 @@ def compile_kernels():
 	#their directories will need to be included so that the compiler (NVRTC) can find them
 	I = {"I":['vector_extensions', 'interval']}
 
-	#macros defined in the kernel.cu file. This allows kernel parameters to be defined/modified
-	#within the python file. Each also has a default macro value defined within the kernel
-	#file if no value is provided from Python.
+	#macros defined in the kernel. This allows kernel parameters to be defined/modified
+	#within a python file. Each also has a default macro value defined within the kernel
+	#if no value is provided from Python.
 	macros = {'define-macro':[f'SURFACE={surface_levelset}',
 							  f'COUNT_OCCUPIED={str(count_occupied).lower()}', #C/C++ boolean values are lowercase
 							  f'QUAD_SIZE={quad_size}']}
@@ -36,7 +36,8 @@ def launch_sparse(box, h):
 	global root
 	def set_pending_kernel_limit():
 		#setting the pending kernel launch count to a high value helps prevent
-		#the buffer from needing to be resized during the integration process.
+		#the kernal launch queue buffer from needing to be resized during the
+		#integration process.
 		attr = pycu.CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT
 		pycu.ctx_set_limit(attr, 1 << 15)
 
@@ -45,10 +46,10 @@ def launch_sparse(box, h):
 	#quad is multiple entries (which are then summed at the end) to help prevent
 	#floating point round-off
 	quad = np.zeros(quad_size, dtype = np.float32)
-	#tracks the number of leaf nodes run (must be enabled within kernel.cu)
+	#tracks the number of leaf nodes run
 	occupancy = np.zeros(1, dtype = np.uint64)
-	#the functions used in the examples are centered on (0,0,0) so an
-	#offset is used to shift the grid such that the geometry is centered
+	#the defining functions, f, used in the examples are centered on (0,0,0)
+	#so an offset is used to shift the grid such that the geometry is centered
 	#and not clipped
 	offset = np.array(-box/2., dtype = np.float32)
 
@@ -112,5 +113,5 @@ h = np.float32(box[0]/((shape) - 1))
 
 print([shape]*3,'\n')
 root, dense = compile_kernels()
-# launch_sparse(box, h)
+launch_sparse(box, h)
 # launch_dense(box, h)
