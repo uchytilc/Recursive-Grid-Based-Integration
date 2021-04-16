@@ -1,16 +1,12 @@
 #include <stdint>
+#include "python_defines.cuh"
 #include "interval.cuh"
 
-#define SURFACE 0.f
-#define COUNT_OCCUPIED false
 //radius of finite difference stencil
 #define RAD 1
-
-#define EPS 1e-7
-
+//maximum recursion depth
 #define MAX_DEPTH 3
-//length of buffer that stores quadrature contributions
-#define QUAD_LENGTH 10
+#define EPS 1e-7
 
 #define LOG2DIM_INTERNAL_BRICK 5u
 #define INTERNAL_BRICK (1u << LOG2DIM_INTERNAL_BRICK)
@@ -255,7 +251,7 @@ __global__ void leaf(float* quad, uint64_t* occupancy, uint3* shape, uint3 origi
 	if (threadIdx.x == 0){
 		//find first entry in `quad` that `result` can be added to without round-off
 		int n = 0;
-		for (; n < QUAD_LENGTH; ++n){
+		for (; n < QUAD_SIZE; ++n){
 			if (abs(result/quad[n]) > EPS){
 				break;
 			}
