@@ -1,11 +1,10 @@
 #add pycu to path
 import pathlib, sys
 path = pathlib.Path(__file__)
-path = path.parent.absolute() #.parent
+path = path.parent.absolute().parent
 sys.path.append(str(path))
 
 import pycu
-import os
 import time
 import numpy as np
 
@@ -16,13 +15,14 @@ def compile_kernels():
 	entry = ["root", "dense"]
 	nvrtc_options = {}
 
-	#if the C header files are in a location other than where the main.py file is located
-	#their directories will need to be included so that the compiler (NVRTC) can find them
+	#if there are include statements within in the kernel file and the C header files are
+	#in a location other than where the main.py file is located their directories will need
+	#to be included so that the compiler (NVRTC) can find them
 	I = {"I":['vector_extensions', 'interval']}
 
-	#macros defined in the kernel. This allows kernel parameters to be defined/modified
-	#within a python file. Each also has a default macro value defined within the kernel
-	#if no value is provided from Python.
+	#macros can be defined within in the kernel file so that kernel parameters can be defined/modified
+	#from within a python file via the NVRTC compiler. Each macro also has a default value defined within
+	#the kernel that is used if no value is provided from Python.
 	macros = {'define-macro':[f'SURFACE={surface_levelset}',
 							  f'COUNT_OCCUPIED={str(count_occupied).lower()}', #C/C++ boolean values are lowercase
 							  f'QUAD_SIZE={quad_size}']}
@@ -36,8 +36,8 @@ def launch_sparse(box, h):
 	global root
 	def set_pending_kernel_limit():
 		#setting the pending kernel launch count to a high value helps prevent
-		#the kernal launch queue buffer from needing to be resized during the
-		#integration process.
+		#the kernal launch queue buffer from being exceeded and resized during the
+		#integration kernel execution.
 		attr = pycu.CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT
 		pycu.ctx_set_limit(attr, 1 << 15)
 
@@ -53,17 +53,17 @@ def launch_sparse(box, h):
 	#and not clipped
 	offset = np.array(-box/2., dtype = np.float32)
 
-	d_quad = pycu.to_device_buffer(quad)
-	d_occupancy = pycu.to_device_buffer(occupancy)
-	d_box = pycu.to_device_buffer(box)
-	d_offset = pycu.to_device_buffer(offset)
+	d_quad = pycu.to_device_array(quad)
+	d_occupancy = pycu.to_device_array(occupancy)
+	d_box = pycu.to_device_array(box)
+	d_offset = pycu.to_device_array(offset)
 	d_h = h
 
 	blocks, threads = 1,1
 
 	print('sparse')
 	start = time.time()
-	root<<[blocks, threads]>>(d_quad, d_occupancy, d_box, d_h, d_offset)
+	root[blocks, threads](d_quad, d_occupancy, d_box, d_h, d_offset)
 	quad = sorted(pycu.to_host(d_quad))
 	print('time: ', time.time() - start)
 	print('quad: ', np.sum(quad))
@@ -98,17 +98,17 @@ def launch_dense(box, h):
 
 	print('dense')
 	start = time.time()
-	dense<<[blocks, threads]>>(d_quad, d_shape, d_offset, d_h)
+	dense[blocks, threads](d_quad, d_shape, d_offset, d_h)
 	quad = pycu.to_host(d_quad)
 	print('time: ', time.time() - start)
 	print('quad: ', quad[0])
 
 surface_levelset = 0
-count_occupied = False
+count_occupied = True
 quad_size = 10
 
 box = np.array([4.5,4.5,4.5], dtype = np.float32)
-shape = 1 << 11
+shape = 1 << 14
 h = np.float32(box[0]/((shape) - 1))
 
 print([shape]*3,'\n')

@@ -2,11 +2,10 @@
 #include "python_defines.cuh"
 #include "interval.cuh"
 
+#define EPS 1e-7
+
 //radius of finite difference stencil
 #define RAD 1
-//maximum recursion depth
-#define MAX_DEPTH 3
-#define EPS 1e-7
 
 #define LOG2DIM_INTERNAL_BRICK 5u
 #define INTERNAL_BRICK (1u << LOG2DIM_INTERNAL_BRICK)
@@ -178,8 +177,12 @@ __device__ inline void central_difference<2>(float* result, float3 r, float h){
 	}
 }
 
-__device__ inline bool split_levelset(const Interval& interval, float levelset){
+__device__ inline bool split_levelset(const Interval<float>& interval, float levelset){
 	return interval.lo() <= levelset && levelset <= interval.hi();
+}
+
+__device__ inline bool less_than_levelset(const Interval<float>& interval, float levelset){
+	return interval.hi() <= levelset;
 }
 
 __device__ inline uint32_t determine_span(uint8_t depth){
@@ -196,11 +199,18 @@ __device__ inline uint3 determine_shape(float3 box, float h){
 __device__ inline uint8_t determine_depth(uint3 shape){
 	uint8_t depth = 0;
 	shape = shape >> LOG2DIM_LEAF_BRICK;
-	for (; depth < MAX_DEPTH; ++depth){
+	while (1){
+		// ++depth;
 		if (shape.x + shape.y + shape.z == 0)
 			break;
 		shape = shape >> LOG2DIM_INTERNAL_BRICK;
+		++depth;
 	}
+	// for (; depth < 3; ++depth){
+	// 	if (shape.x + shape.y + shape.z == 0)
+	// 		break;
+	// 	shape = shape >> LOG2DIM_INTERNAL_BRICK;
+	// }
 	//make sure there is always at least one level within tree
 	depth = depth == 0 ? 1 : depth;
 	return depth;
@@ -219,14 +229,20 @@ __device__ inline void subdivide(float* quad, uint64_t* occupancy, uint3* shape,
 	//need to subtract RAD as float from lo because shape is a uint that can overflow if origin - RAD is less than 0
 	float3 lo = __fadd_rd(__fadd_rd(__fmul_rd(make_float3(origin), h), __fmul_rd(RAD, -h)), *offset);
 	float3 hi = __fadd_rd(__fmul_ru(make_float3(origin + span + RAD), h), *offset);
-	Interval fhat = f<Interval>(Interval(lo.x, hi.x), Interval(lo.y, hi.y), Interval(lo.z, hi.z));
+	Interval<float> fhat = f< Interval<float> >(Interval<float>(lo.x, hi.x), Interval<float>(lo.y, hi.y), Interval<float>(lo.z, hi.z));
 	if (split_levelset(fhat, SURFACE)){
 		if (depth - 1 > 0){
 			internal<<<INTERNAL_BLOCKS, INTERNAL_THREADS>>>(quad, occupancy, shape, origin, offset, h, depth - 1);							
 		}
 		else{
-			leaf<<<LEAF_BLOCKS, LEAF_THREADS>>>(quad, occupancy, shape, origin, offset, h);
+			if (COUNT_OCCUPIED)
+				atomicAdd(occupancy, 1u);
+			// leaf<<<LEAF_BLOCKS, LEAF_THREADS>>>(quad, occupancy, shape, origin, offset, h);
 		}
+	}
+	else if (less_than_levelset(fhat, SURFACE)){
+		if (COUNT_OCCUPIED) // && depth - 1 > 0
+			atomicAdd(occupancy, 1u);
 	}
 }
 
@@ -249,13 +265,17 @@ __global__ void leaf(float* quad, uint64_t* occupancy, uint3* shape, uint3 origi
 	result = block_sum_reduce(result, shared);
 
 	if (threadIdx.x == 0){
-		//find first entry in `quad` that `result` can be added to without round-off
 		int n = 0;
 		for (; n < QUAD_SIZE; ++n){
 			if (abs(result/quad[n]) > EPS){
 				break;
 			}
 		}
+		// int a = ilogbf(result);
+		// int b = ilogbf(quad[n]);
+		// int c = b - a;
+		// printf("%d, %d, %d, %f \n", a, b, c, result/quad[n]);
+
 		atomicAdd(&quad[n], result);
 		if (COUNT_OCCUPIED)
 			atomicAdd(occupancy, 1u);
@@ -289,6 +309,8 @@ extern "C"{
 		uint8_t depth = determine_depth(shape);
 		uint32_t span = determine_span(depth - 1);
 		uint3 children = (shape + span - 1)/span;
+
+		// printf("%u, %u, %u, %u, %u\n", (uint32_t)depth, span, children.x, children.y, children.z);
 
 		for (uint32_t i = 0; i < children.x; ++i){
 			for (uint32_t j = 0; j < children.y; ++j){
